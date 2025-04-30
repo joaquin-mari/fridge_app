@@ -6,12 +6,12 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { supabase } from "../apis/supabaseClient";
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -19,37 +19,26 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Mock data for demonstration - replace with actual API call
+  // Fetch user data
   const fetchUserData = async () => {
     try {
-      // Replace with your actual API endpoint
-      // const response = await fetch('https://your-api-endpoint/users/1');
-      // const userData = await response.json();
+      const { data, error } = await supabase
+        .from("users") // Replace with your actual table name
+        .select(
+          `
+          id, email, name, weight, height, gender, 
+          interest (id, name),
+          fridge:fridge (
+            id,
+            items:fridge_item (id, name, quantity)
+          )
+          `
+        )
+        .eq("id", 6) // Fetch user with id 6 or dynamically use session
+        .single();
 
-      // Mock user data based on your Java model
-      const userData = {
-        id: 1,
-        email: "user@example.com",
-        name: "Alex Johnson",
-        weight: 72.5,
-        height: 175.0,
-        gender: "Male",
-        interests: [
-          { id: 1, name: "Running" },
-          { id: 3, name: "Cooking" },
-          { id: 5, name: "Swimming" },
-        ],
-        fridge: {
-          id: 1,
-          items: [
-            { id: 1, name: "Broccoli", quantity: 2 },
-            { id: 2, name: "Chicken", quantity: 1 },
-            { id: 3, name: "Yogurt", quantity: 3 },
-          ],
-        },
-      };
-
-      setUser(userData);
+      if (error) throw error;
+      setUser(data);
       setLoading(false);
     } catch (err) {
       console.error("Error fetching user data:", err);
@@ -87,32 +76,41 @@ export default function ProfileScreen() {
     );
   }
 
+  // Handle potentially missing profile data with safe defaults
+  const userName = user?.name || "User";
+  const userEmail = user?.email || "No email provided";
+  const userHeight = user?.height || "--";
+  const userWeight = user?.weight || "--";
+  const userGender = user?.gender || "Not specified";
+  const interests = user?.interests || [];
+  const fridgeItems = user?.fridge?.items || [];
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={styles.header}>
           <View style={styles.profileImageContainer}>
-            <Text style={styles.profileInitial}>{user.name.charAt(0)}</Text>
+            <Text style={styles.profileInitial}>{userName.charAt(0)}</Text>
           </View>
-          <Text style={styles.profileName}>{user.name}</Text>
-          <Text style={styles.profileEmail}>{user.email}</Text>
+          <Text style={styles.profileName}>{userName}</Text>
+          <Text style={styles.profileEmail}>{userEmail}</Text>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user.height} cm</Text>
+            <Text style={styles.statValue}>{userHeight} cm</Text>
             <Text style={styles.statLabel}>Height</Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user.weight} kg</Text>
+            <Text style={styles.statValue}>{userWeight} kg</Text>
             <Text style={styles.statLabel}>Weight</Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user.gender}</Text>
+            <Text style={styles.statValue}>{userGender}</Text>
             <Text style={styles.statLabel}>Gender</Text>
           </View>
         </View>
@@ -121,11 +119,15 @@ export default function ProfileScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Interests</Text>
           <View style={styles.interestTagsContainer}>
-            {user.interests.map((interest) => (
-              <View key={interest.id} style={styles.interestTag}>
-                <Text style={styles.interestTagText}>{interest.name}</Text>
-              </View>
-            ))}
+            {interests.length > 0 ? (
+              interests.map((interest) => (
+                <View key={interest.id} style={styles.interestTag}>
+                  <Text style={styles.interestTagText}>{interest.name}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyStateText}>No interests added yet</Text>
+            )}
           </View>
         </View>
 
@@ -133,19 +135,25 @@ export default function ProfileScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>My Fridge</Text>
           <View style={styles.fridgeContainer}>
-            {user.fridge.items.map((item) => (
-              <View key={item.id} style={styles.fridgeItem}>
-                <View style={styles.fridgeItemIconContainer}>
-                  <Ionicons
-                    name="nutrition-outline"
-                    size={20}
-                    color="#4CAF50"
-                  />
+            {fridgeItems.length > 0 ? (
+              fridgeItems.map((item) => (
+                <View key={item.id} style={styles.fridgeItem}>
+                  <View style={styles.fridgeItemIconContainer}>
+                    <Ionicons
+                      name="nutrition-outline"
+                      size={20}
+                      color="#4CAF50"
+                    />
+                  </View>
+                  <Text style={styles.fridgeItemName}>{item.name}</Text>
+                  <Text style={styles.fridgeItemQuantity}>
+                    x{item.quantity}
+                  </Text>
                 </View>
-                <Text style={styles.fridgeItemName}>{item.name}</Text>
-                <Text style={styles.fridgeItemQuantity}>x{item.quantity}</Text>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={styles.emptyStateText}>Your fridge is empty</Text>
+            )}
           </View>
         </View>
 
@@ -198,7 +206,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
     backgroundColor: "#F8FFF8",
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
@@ -240,7 +249,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     marginHorizontal: 20,
-    marginTop: -30,
+    marginTop: -15,
     padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -344,5 +353,10 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  emptyStateText: {
+    color: "#999",
+    fontStyle: "italic",
+    paddingVertical: 10,
   },
 });
