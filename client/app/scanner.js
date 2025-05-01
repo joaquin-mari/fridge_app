@@ -19,11 +19,14 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
 import { useIsFocused } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useRouter, useNavigation } from "expo-router"; // Import both hooks for flexibility
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function ScannerScreen() {
   const isFocused = useIsFocused();
+  const router = useRouter(); // For path-based navigation
+  const navigation = useNavigation(); // For backward compatibility
   const colorScheme = useColorScheme();
   const cameraRef = useRef(null);
 
@@ -44,7 +47,12 @@ export default function ScannerScreen() {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === "granted");
 
-      await MediaLibrary.requestPermissionsAsync();
+      try {
+        await MediaLibrary.requestPermissionsAsync();
+      } catch (error) {
+        console.log("Media library permission error:", error);
+        // Continue without media library permissions
+      }
     })();
   }, []);
 
@@ -65,7 +73,12 @@ export default function ScannerScreen() {
         );
 
         if (Platform.OS !== "web") {
-          await MediaLibrary.saveToLibraryAsync(resizedPhoto.uri);
+          try {
+            await MediaLibrary.saveToLibraryAsync(resizedPhoto.uri);
+          } catch (err) {
+            console.log("Failed to save to library:", err);
+            // Continue without saving to library since this might be due to permissions
+          }
         }
 
         setCapturedImage(resizedPhoto.uri);
@@ -101,12 +114,55 @@ export default function ScannerScreen() {
   };
 
   const sendToBackend = () => {
-    // Here you would add code to send the image to your backend
     Alert.alert(
       "Processing",
       "Your food image will be analyzed by our system.",
       [{ text: "OK", onPress: resetCamera }]
     );
+  };
+
+  // Safe navigation to gallery with fallback
+  const navigateToGallery = () => {
+    try {
+      // Try using the index-based route first (preferred method in Expo Router)
+      router.push("/(tabs)/gallery");
+    } catch (error) {
+      console.warn("Navigation error:", error);
+
+      // Fallback options
+      try {
+        // Try different path formats
+        router.push("/gallery");
+      } catch (secondError) {
+        console.warn("Secondary navigation error:", secondError);
+
+        // As a last resort, show an alert
+        Alert.alert("Gallery", "Gallery screen will be implemented soon");
+      }
+    }
+  };
+
+  // Go back function with graceful fallback
+  const goBack = () => {
+    try {
+      router.back();
+    } catch (error) {
+      console.warn("Navigation back error:", error);
+      // If router.back() fails, try alternative navigation methods
+      try {
+        // Try classic navigation API if available
+        if (navigation?.canGoBack?.()) {
+          navigation.goBack();
+        } else {
+          // If all else fails, go to home
+          router.push("/(tabs)/home");
+        }
+      } catch (fallbackError) {
+        console.warn("Fallback navigation error:", fallbackError);
+        // Last resort - go to home with simplest path
+        router.push("/");
+      }
+    }
   };
 
   if (hasPermission === null) {
@@ -132,6 +188,19 @@ export default function ScannerScreen() {
             Please enable camera access in your device settings to use the
             scanner.
           </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              try {
+                router.push("/(tabs)/home");
+              } catch (error) {
+                console.warn("Navigation error:", error);
+                router.push("/");
+              }
+            }}
+          >
+            <Text style={styles.backButtonText}>Return to Home</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -251,7 +320,10 @@ export default function ScannerScreen() {
                     <View style={styles.captureButtonInner} />
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={styles.footerButton}>
+                  <TouchableOpacity
+                    style={styles.footerButton}
+                    onPress={navigateToGallery}
+                  >
                     <Ionicons name="images-outline" size={28} color="white" />
                   </TouchableOpacity>
                 </View>
@@ -267,65 +339,87 @@ export default function ScannerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: "#000",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#f5f5f5",
   },
   loadingText: {
-    marginTop: 10,
-    color: "#666",
+    marginTop: 12,
     fontSize: 16,
+    color: "#555",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f5f5f5",
     padding: 20,
-    backgroundColor: "#FFFFFF",
   },
   errorText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
-    textAlign: "center",
   },
   errorSubtext: {
-    marginTop: 10,
+    marginTop: 8,
     fontSize: 16,
     color: "#666",
     textAlign: "center",
-    lineHeight: 22,
+    marginBottom: 20,
+  },
+  backButton: {
+    marginTop: 15,
+    backgroundColor: "#4CAF50",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  backButtonText: {
+    color: "white",
+    fontSize: 16,
   },
   cameraContainer: {
     flex: 1,
+    overflow: "hidden",
   },
   camera: {
     flex: 1,
     justifyContent: "space-between",
   },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  processingText: {
+    color: "white",
+    fontSize: 16,
+    marginTop: 12,
+  },
   cameraHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 20,
     paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   cameraHeaderButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "center",
     alignItems: "center",
   },
   cameraHeaderTitle: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
   },
   filterContainer: {
@@ -333,39 +427,39 @@ const styles = StyleSheet.create({
     top: 70,
     left: 0,
     right: 0,
+    paddingVertical: 8,
   },
   filterScroll: {
     paddingHorizontal: 15,
-    paddingVertical: 10,
   },
   filterButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
     marginHorizontal: 5,
-    backgroundColor: "rgba(0,0,0,0.3)",
   },
   activeFilterButton: {
     backgroundColor: "#4CAF50",
   },
   filterText: {
     color: "white",
-    fontWeight: "500",
+    fontSize: 14,
   },
   activeFilterText: {
     fontWeight: "bold",
   },
   cameraFooter: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 30,
     paddingHorizontal: 30,
+    paddingBottom: 30,
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   footerButton: {
     width: 50,
     height: 50,
-    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -382,20 +476,6 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: "white",
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-  },
-  processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  processingText: {
-    color: "white",
-    fontSize: 16,
-    marginTop: 16,
-    fontWeight: "500",
   },
   previewContainer: {
     flex: 1,
@@ -405,61 +485,50 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    zIndex: 10,
+    padding: 15,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   previewHeaderButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "center",
     alignItems: "center",
   },
   previewHeaderTitle: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
   },
   previewImage: {
     flex: 1,
-    width: screenWidth,
-    height: screenHeight,
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: "100%",
   },
   previewFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 30,
-    paddingHorizontal: 30,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    paddingVertical: 20,
+    padding: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   retakeButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#555",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 25,
-    flexDirection: "row",
-    alignItems: "center",
   },
   sendButton: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#4CAF50",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 25,
-    flexDirection: "row",
-    alignItems: "center",
   },
   buttonText: {
     color: "white",
-    fontWeight: "bold",
     marginLeft: 8,
+    fontSize: 16,
   },
 });
