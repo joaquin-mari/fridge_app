@@ -1,4 +1,3 @@
-// app/(tabs)/scanner.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -14,25 +13,24 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Camera, CameraType, FlashMode } from "expo-camera";
+import * as ExpoCamera from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
 import { useIsFocused } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { useRouter, useNavigation } from "expo-router"; // Import both hooks for flexibility
+import { useRouter } from "expo-router";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function ScannerScreen() {
   const isFocused = useIsFocused();
-  const router = useRouter(); // For path-based navigation
-  const navigation = useNavigation(); // For backward compatibility
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const cameraRef = useRef(null);
 
   const [hasPermission, setHasPermission] = useState(null);
-  const [cameraType, setCameraType] = useState(CameraType.back);
-  const [flashMode, setFlashMode] = useState(FlashMode.off);
+  const [cameraType, setCameraType] = useState("back"); // Use string values instead of enums
+  const [flashMode, setFlashMode] = useState("off"); // Use string values instead of enums
   const [capturedImage, setCapturedImage] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [filters, setFilters] = useState([
@@ -42,19 +40,30 @@ export default function ScannerScreen() {
     { id: 4, name: "Dessert", active: false },
   ]);
 
+  // Initialize camera when screen is focused
   useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
+    let mounted = true;
 
-      try {
-        await MediaLibrary.requestPermissionsAsync();
-      } catch (error) {
-        console.log("Media library permission error:", error);
-        // Continue without media library permissions
-      }
-    })();
-  }, []);
+    if (isFocused) {
+      (async () => {
+        const { status } = await ExpoCamera.requestCameraPermissionsAsync();
+        if (mounted) {
+          setHasPermission(status === "granted");
+        }
+
+        try {
+          await MediaLibrary.requestPermissionsAsync();
+        } catch (error) {
+          console.log("Media library permission error:", error);
+          // Continue without media library permissions
+        }
+      })();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [isFocused]);
 
   const takePicture = async () => {
     if (cameraRef.current) {
@@ -96,13 +105,11 @@ export default function ScannerScreen() {
   };
 
   const toggleCameraType = () => {
-    setCameraType(
-      cameraType === CameraType.back ? CameraType.front : CameraType.back
-    );
+    setCameraType(cameraType === "back" ? "front" : "back");
   };
 
   const toggleFlash = () => {
-    setFlashMode(flashMode === FlashMode.off ? FlashMode.on : FlashMode.off);
+    setFlashMode(flashMode === "off" ? "on" : "off");
   };
 
   const selectFilter = (id) => {
@@ -121,47 +128,13 @@ export default function ScannerScreen() {
     );
   };
 
-  // Safe navigation to gallery with fallback
+  // Simplified navigation to gallery using router
   const navigateToGallery = () => {
     try {
-      // Try using the index-based route first (preferred method in Expo Router)
-      router.push("/(tabs)/gallery");
+      router.push("/gallery");
     } catch (error) {
       console.warn("Navigation error:", error);
-
-      // Fallback options
-      try {
-        // Try different path formats
-        router.push("/gallery");
-      } catch (secondError) {
-        console.warn("Secondary navigation error:", secondError);
-
-        // As a last resort, show an alert
-        Alert.alert("Gallery", "Gallery screen will be implemented soon");
-      }
-    }
-  };
-
-  // Go back function with graceful fallback
-  const goBack = () => {
-    try {
-      router.back();
-    } catch (error) {
-      console.warn("Navigation back error:", error);
-      // If router.back() fails, try alternative navigation methods
-      try {
-        // Try classic navigation API if available
-        if (navigation?.canGoBack?.()) {
-          navigation.goBack();
-        } else {
-          // If all else fails, go to home
-          router.push("/(tabs)/home");
-        }
-      } catch (fallbackError) {
-        console.warn("Fallback navigation error:", fallbackError);
-        // Last resort - go to home with simplest path
-        router.push("/");
-      }
+      Alert.alert("Gallery", "Gallery screen will be implemented soon");
     }
   };
 
@@ -191,12 +164,7 @@ export default function ScannerScreen() {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              try {
-                router.push("/(tabs)/home");
-              } catch (error) {
-                console.warn("Navigation error:", error);
-                router.push("/");
-              }
+              router.push("/home");
             }}
           >
             <Text style={styles.backButtonText}>Return to Home</Text>
@@ -243,12 +211,12 @@ export default function ScannerScreen() {
         <>
           {isFocused && (
             <View style={styles.cameraContainer}>
-              <Camera
+              {/* Camera with string-based props instead of enums */}
+              <ExpoCamera.Camera
                 ref={cameraRef}
                 style={styles.camera}
                 type={cameraType}
                 flashMode={flashMode}
-                ratio="16:9"
               >
                 {processing && (
                   <View style={styles.processingOverlay}>
@@ -262,13 +230,11 @@ export default function ScannerScreen() {
                 <View style={styles.cameraHeader}>
                   <TouchableOpacity
                     style={styles.cameraHeaderButton}
-                    onPress={toggleFlash}
+                    onPress={() => {
+                      router.push("/home");
+                    }}
                   >
-                    <Ionicons
-                      name={flashMode === FlashMode.on ? "flash" : "flash-off"}
-                      size={24}
-                      color="white"
-                    />
+                    <Ionicons name="arrow-back" size={24} color="white" />
                   </TouchableOpacity>
 
                   <Text style={styles.cameraHeaderTitle}>Food Scanner</Text>
@@ -310,7 +276,16 @@ export default function ScannerScreen() {
                 </View>
 
                 <View style={styles.cameraFooter}>
-                  <View style={styles.footerButton} />
+                  <TouchableOpacity
+                    style={styles.footerButton}
+                    onPress={toggleFlash}
+                  >
+                    <Ionicons
+                      name={flashMode === "on" ? "flash" : "flash-off"}
+                      size={24}
+                      color="white"
+                    />
+                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.captureButton}
@@ -327,7 +302,7 @@ export default function ScannerScreen() {
                     <Ionicons name="images-outline" size={28} color="white" />
                   </TouchableOpacity>
                 </View>
-              </Camera>
+              </ExpoCamera.Camera>
             </View>
           )}
         </>
@@ -341,125 +316,76 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#555",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    padding: 20,
-  },
-  errorText: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  errorSubtext: {
-    marginTop: 8,
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  backButton: {
-    marginTop: 15,
-    backgroundColor: "#4CAF50",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-  },
-  backButtonText: {
-    color: "white",
-    fontSize: 16,
-  },
   cameraContainer: {
     flex: 1,
-    overflow: "hidden",
   },
   camera: {
     flex: 1,
-    justifyContent: "space-between",
-  },
-  processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  processingText: {
-    color: "white",
-    fontSize: 16,
-    marginTop: 12,
   },
   cameraHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 20,
+    paddingTop: Platform.OS === "android" ? 40 : 20,
   },
   cameraHeaderButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "center",
     alignItems: "center",
   },
   cameraHeaderTitle: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 18,
+    fontWeight: "600",
   },
   filterContainer: {
     position: "absolute",
-    top: 70,
+    top: Platform.OS === "android" ? 100 : 80,
     left: 0,
     right: 0,
-    paddingVertical: 8,
   },
   filterScroll: {
     paddingHorizontal: 15,
   },
   filterButton: {
-    paddingHorizontal: 16,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
     marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   activeFilterButton: {
     backgroundColor: "#4CAF50",
+    borderColor: "#4CAF50",
   },
   filterText: {
     color: "white",
-    fontSize: 14,
+    fontWeight: "500",
   },
   activeFilterText: {
-    fontWeight: "bold",
+    color: "white",
+    fontWeight: "600",
   },
   cameraFooter: {
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "space-around",
     alignItems: "center",
     paddingHorizontal: 30,
-    paddingBottom: 30,
-    backgroundColor: "rgba(0,0,0,0.4)",
   },
   footerButton: {
-    width: 50,
-    height: 50,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -477,6 +403,18 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: "white",
   },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  processingText: {
+    color: "white",
+    fontSize: 16,
+    marginTop: 10,
+    fontWeight: "500",
+  },
   previewContainer: {
     flex: 1,
     backgroundColor: "#000",
@@ -485,35 +423,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 15,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 20,
+    paddingTop: Platform.OS === "android" ? 40 : 20,
   },
   previewHeaderButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "center",
     alignItems: "center",
   },
   previewHeaderTitle: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 18,
+    fontWeight: "600",
   },
   previewImage: {
     flex: 1,
-    width: "100%",
+    width: screenWidth,
+    height: undefined,
   },
   previewFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "space-around",
     alignItems: "center",
     padding: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "#000",
   },
   retakeButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#555",
+    backgroundColor: "rgba(255,255,255,0.2)",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 25,
@@ -528,7 +469,47 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "white",
+    fontWeight: "600",
     marginLeft: 8,
-    fontSize: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+  },
+  loadingText: {
+    color: "white",
+    marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#000",
+  },
+  errorText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 16,
+  },
+  errorSubtext: {
+    color: "rgba(255,255,255,0.7)",
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  backButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    marginTop: 20,
+  },
+  backButtonText: {
+    color: "white",
+    fontWeight: "600",
   },
 });

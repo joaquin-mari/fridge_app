@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { supabase } from "../apis/supabaseClient";
+import { supabase } from "../../apis/supabaseClient";
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
