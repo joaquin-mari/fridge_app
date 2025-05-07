@@ -16,21 +16,24 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ExpoCamera from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
-import { useIsFocused } from "@react-navigation/native";
+// Remove this import: import { useIsFocused } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router"; // Add useSegments
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function ScannerScreen() {
-  const isFocused = useIsFocused();
+  // Replace useIsFocused with our own focus tracking
+  const segments = useSegments();
+  const isFocused = segments[0] === "tabs" && segments[1] === "scanner";
+
   const router = useRouter();
   const colorScheme = useColorScheme();
   const cameraRef = useRef(null);
 
   const [hasPermission, setHasPermission] = useState(null);
-  const [cameraType, setCameraType] = useState("back"); // Use string values instead of enums
-  const [flashMode, setFlashMode] = useState("off"); // Use string values instead of enums
+  const [cameraType, setCameraType] = useState("back");
+  const [flashMode, setFlashMode] = useState("off");
   const [capturedImage, setCapturedImage] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [filters, setFilters] = useState([
@@ -174,6 +177,8 @@ export default function ScannerScreen() {
     );
   }
 
+  // Return the rest of your component JSX here...
+  // Add your camera view, controls, etc.
   return (
     <SafeAreaView style={styles.container}>
       {capturedImage ? (
